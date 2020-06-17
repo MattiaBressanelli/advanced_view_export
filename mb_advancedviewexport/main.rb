@@ -223,7 +223,7 @@ module MattiaBressanelli
             maps_array.pop()
             maps_array.pop()
 
-            maps_array.push("fixedambientocclusion_map")
+            maps_array.unshift("fixedambientocclusion_map")
         end
 
         # iterate over maps array
@@ -252,13 +252,15 @@ module MattiaBressanelli
         background_string_rev = background_string.gsub("/", "\\")
         system("del #{background_string_rev}")
 
+        output_folder_rev = $output_folder.gsub("/", "\\")
+
         image_to_delete = output_folder_rev + "\\" + $export_name + "_ambientocclusion_map.png"
         system("cd \\")
-        system("del #{background_string_rev}")
+        system("del #{image_to_delete}")
         
         image_to_delete = output_folder_rev + "\\" + $export_name + "_boolean_map.png"
         system("cd \\")
-        system("del #{background_string_rev}")
+        system("del #{image_to_delete}")
 
         i = 0
         while i < (maps_array.length() - 1) do
