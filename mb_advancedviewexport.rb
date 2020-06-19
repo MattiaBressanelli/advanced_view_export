@@ -6,7 +6,7 @@ module MattiaBressanelli
 
     unless file_loaded?(__FILE__)
     
-      ex = SketchupExtension.new('Advanced View Export', 'mb_advancedviewexport/main')
+      ex = SketchupExtension.new('Advanced View Export', 'mb_advanced_view_export/main')
 
       ex.description = 'Extension to export the current view as image with style.'
       ex.version     = '1.0.0'
