@@ -5,18 +5,32 @@ require 'sketchup.rb'
 module MattiaBressanelli
   module AdvancedViewExport
 
-    # global variables
-    $output_folder = ""
-    $export_name = ""
-    $image_width = nil
-    $image_height = nil
-    $maps_array = []
-    $composite
-    $ambientocclusion_exist = false
-    $boolean_exist = false
+    # parameters
+    class Parameters
+
+        attr_accessor :output_folder, :export_name, :image_width, :image_height, :maps_array, :composite, :ambientocclusion_exist, :boolean_exist
+
+        def initialize()
+            @output_folder = ""
+            @export_name = ""
+            @image_width = nil
+            @image_height = nil
+            @maps_array = []
+            @composite
+            @ambientocclusion_exist = false
+            @boolean_exist = false
+        end
+
+        def to_s()
+            return ["#{@output_folder}", "#{@export_name}", "#{@image_width}", "#{@image_height}", "#{@maps_array}", "#{@composite}", "#{@ambientocclusion_exist}", "#{@boolean_exist}"]
+        end
+    end
     
     # Main function
     def self.main()
+
+        # initialize parameters
+        parameters = Parameters.new()
        
         # display html UI
         dialog = UI::HtmlDialog.new(
@@ -43,42 +57,41 @@ module MattiaBressanelli
 
         # set output directory
         dialog.add_action_callback("set_output_dir") { |action_context|
-            $output_folder = set_output_dir()
-            if $output_folder === nil
-                $output_folder = ""
+            parameters.output_folder = set_output_dir()
+            if parameters.output_folder === nil
+                parameters.output_folder = ""
             end
-            js_command = "document.getElementById('output-folder').value = '" + $output_folder + "'"
+            js_command = "document.getElementById('output-folder').value = '" + parameters.output_folder + "'"
             dialog.execute_script(js_command)
         }
 
         # get image name
         dialog.add_action_callback("get_image_name") { |action_context, image_name|
-            $export_name = image_name.gsub(" ", "_").gsub(".", "_").gsub("/", "_").gsub("\\", "_")
+            parameters.export_name = image_name.gsub(" ", "_").gsub(".", "_").gsub("/", "_").gsub("\\", "_").gsub("*", "_").gsub("?", "_").gsub(":", "_").gsub("<", "_").gsub(">", "_").gsub("|", "_").gsub("\"", "_")
         }
 
         # get maps options
         dialog.add_action_callback("get_maps_options") { |action_context, image_width, image_height, maps_array, composite|
-            $image_width = image_width
-            $image_height = image_height            
-            $maps_array = maps_array
-            $composite = composite
+            parameters.image_width = image_width
+            parameters.image_height = image_height            
+            parameters.maps_array = maps_array
+            parameters.composite = composite
         }
 
         # export button
         dialog.add_action_callback("export_image_maps") { |action_context|
-            if $output_folder === ""
+            if parameters.output_folder === ""
                 UI.messagebox('Select an output folder')
-            elsif $export_name === ""
+            elsif parameters.export_name === ""
                 UI.messagebox('Insert a name')
-            elsif $image_width === nil || $image_height === nil
+            elsif parameters.image_width === nil || parameters.image_height === nil
                 UI.messagebox('Set image size')
-            elsif $maps_array === []
+            elsif parameters.maps_array === []
                 UI.messagebox('Select at least one map')
             else
-                export_image_maps($maps_array, $image_width, $image_height, $composite)
+                export_image_maps(parameters, dialog)
             end
         }
-
     end
 
     # add custom styles from folder
@@ -119,7 +132,7 @@ module MattiaBressanelli
     end
 
     # Function to export image maps
-    def self.export_image_maps(maps_array, image_width = 3000, image_height = 2000, composite)
+    def self.export_image_maps(parameters, dialog)
 
         # save style info before export
         active_style_name = Sketchup.active_model.styles.active_style.name
@@ -131,60 +144,66 @@ module MattiaBressanelli
         # temporary disable shadows
         Sketchup.active_model.shadow_info["DisplayShadows"] = false
 
+        # generate random number
+        random_number = rand(1..100)
+
         # export
-        if composite
-            system("mkdir #{$output_folder.gsub("/", "\\")}\\maps")
+        if parameters.composite
+            system("mkdir #{parameters.output_folder.gsub("/", "\\")}\\mb_ave_temp_#{random_number}")
         end
 
-        maps_array.each{ |m|
+        parameters.maps_array.each{ |m|
             if (m == "shadows_map")
                 Sketchup.active_model.shadow_info["DisplayShadows"] = true
             else
                 Sketchup.active_model.shadow_info["DisplayShadows"] = false      
             end
             style = Sketchup.active_model.styles[m]
-            if composite
-                style_string = $output_folder + "/maps/" + $export_name + "_#{style.name}.png"
+            if parameters.composite
+                style_string = parameters.output_folder + "/mb_ave_temp_#{random_number}/" + parameters.export_name + "_#{style.name}.png"
             else
-                style_string = $output_folder + "/" + $export_name + "_#{style.name}.png"
+                style_string = parameters.output_folder + "/" + parameters.export_name + "_#{style.name}.png"
             end
             Sketchup.active_model.styles.selected_style = style
-            Sketchup.active_model.active_view.write_image(style_string, image_width, image_height, true)
+            Sketchup.active_model.active_view.write_image(style_string, parameters.image_width, parameters.image_height, true)
         }
 
         # reset style and shadows as saved before export
         Sketchup.active_model.styles.selected_style = Sketchup.active_model.styles[active_style_name]
         Sketchup.active_model.shadow_info["DisplayShadows"] = shadow_active
 
-        if composite
-            composite_image_maps(maps_array)
+        if parameters.composite
+            composite_image_maps(parameters, random_number)
         end
+
+        # end of operation
+        dialog.close
     end
-
+    
     # Function to composite image maps
-    def self.composite_image_maps(maps_array)
+    def self.composite_image_maps(parameters, random_number)
 
-        background_string = $output_folder + "/maps/background.png"
-        system("magick convert -size #{$image_width}x#{$image_height} xc:#ffffff #{background_string}")
+        background_string = parameters.output_folder + "/mb_ave_temp_#{random_number}/background.png"
+        system("magick convert -size #{parameters.image_width}x#{parameters.image_height} xc:#ffffff #{background_string}")
 
         # check if ao exists
-        if (maps_array.include? "ambientocclusion_map")
-            $ambientocclusion_exist = true
+        if (parameters.maps_array.include? "ambientocclusion_map")
+            parameters.ambientocclusion_exist = true
         end
         
         # check if bool exists
-        if (maps_array.include? "boolean_map")
-            $boolean_exist = true
+        if (parameters.maps_array.include? "boolean_map")
+            parameters.boolean_exist = true
         end
 
         # edit maps before composition
-        maps_array.each{ |m|
+        parameters.maps_array.each{ |m|
 
             style = Sketchup.active_model.styles[m]
-            style_string = $output_folder + "/maps/" + $export_name + "_#{style.name}.png"
+            style_string = parameters.output_folder + "/mb_ave_temp_#{random_number}/" + parameters.export_name + "_#{style.name}.png"
             
             # adaptive blur amount
-            shadows_blur_sigma = (($image_width * $image_height) / 600000).floor()
+            shadows_blur_sigma = ((parameters.image_width * parameters.image_height) / 600000).floor()
 
             # blur and dissolve shadows map          
             if (m == "shadows_map")
@@ -209,16 +228,16 @@ module MattiaBressanelli
         }
 
         # if one of ao map and bool map doesn't exist, remove both of them from the array
-        if ($ambientocclusion_exist && $boolean_exist)
+        if (parameters.ambientocclusion_exist && parameters.boolean_exist)
 
-            background_string = $output_folder + "/maps/background.png"
+            background_string = parameters.output_folder + "/mb_ave_temp_#{random_number}/background.png"
 
-            image_ao = $output_folder + "/maps/" + $export_name + "_ambientocclusion_map.png"
-            image_bool = $output_folder + "/maps/" + $export_name + "_boolean_map.png"
-            image_cmp = $output_folder + "/maps/" + $export_name + "_fixedambientocclusion_map.png"
+            image_ao = parameters.output_folder + "/mb_ave_temp_#{random_number}/" + parameters.export_name + "_ambientocclusion_map.png"
+            image_bool = parameters.output_folder + "/mb_ave_temp_#{random_number}/" + parameters.export_name + "_boolean_map.png"
+            image_cmp = parameters.output_folder + "/mb_ave_temp_#{random_number}/" + parameters.export_name + "_fixedambientocclusion_map.png"
 
             # adaptive blur amount
-            ambientocclusion_blur_sigma = (($image_width * $image_height) / 150000).floor()
+            ambientocclusion_blur_sigma = ((parameters.image_width * parameters.image_height) / 150000).floor()
 
             # blur and dissolve ambient occlusion map
             system("cd \\")
@@ -235,46 +254,46 @@ module MattiaBressanelli
             system("cd \\")
             system("magick composite #{image_ao} #{background_string} #{image_bool} #{image_cmp}")
 
-            system("del #{$output_folder.gsub("/", "\\") + "\\maps\\" + $export_name.gsub("/", "\\") + "_boolean_map.png"}")
-            system("del #{$output_folder.gsub("/", "\\") + "\\maps\\" + $export_name.gsub("/", "\\") + "_ambientocclusion_map.png"}")
+            system("del #{parameters.output_folder.gsub("/", "\\") + "\\mb_ave_temp_#{random_number}\\" + parameters.export_name.gsub("/", "\\") + "_boolean_map.png"}")
+            system("del #{parameters.output_folder.gsub("/", "\\") + "\\mb_ave_temp_#{random_number}\\" + parameters.export_name.gsub("/", "\\") + "_ambientocclusion_map.png"}")
 
-            maps_array.pop()
-            maps_array.pop()
+            parameters.maps_array.pop()
+            parameters.maps_array.pop()
 
-            maps_array.unshift("fixedambientocclusion_map")
+            parameters.maps_array.unshift("fixedambientocclusion_map")
 
         else
-            if $ambientocclusion_exist
-                maps_array.pop()
-                system("del #{$output_folder.gsub("/", "\\") + "\\maps\\" + $export_name.gsub("/", "\\") + "_ambientocclusion_map.png"}")
+            if parameters.ambientocclusion_exist
+                parameters.maps_array.pop()
+                system("del #{parameters.output_folder.gsub("/", "\\") + "\\mb_ave_temp_#{random_number}\\" + parameters.export_name.gsub("/", "\\") + "_ambientocclusion_map.png"}")
             end
-            if $boolean_exist
-                maps_array.pop()
-                system("del #{$output_folder.gsub("/", "\\") + "\\maps\\" + $export_name.gsub("/", "\\") + "_boolean_map.png"}")
+            if parameters.boolean_exist
+                parameters.maps_array.pop()
+                system("del #{parameters.output_folder.gsub("/", "\\") + "\\mb_ave_temp_#{random_number}\\" + parameters.export_name.gsub("/", "\\") + "_boolean_map.png"}")
             end
         end
 
         # iterate over maps array if there are at least two elements
         i = 0
-        if (maps_array.length() == 1)
-            image_file_src = $output_folder + "/maps/" + $export_name + "_#{maps_array[i]}.png"
+        if (parameters.maps_array.length() == 1)
+            image_file_src = parameters.output_folder + "/mb_ave_temp_#{random_number}/" + parameters.export_name + "_#{parameters.maps_array[i]}.png"
             system("cd \\")
-            system("move /Y #{image_file_src.gsub("/", "\\")} #{$output_folder.gsub("/", "\\")}")
-            system("rename #{$output_folder.gsub("/", "\\") + "\\" + $export_name + "_" + maps_array[i]}.png #{$export_name}.png")
+            system("move /Y #{image_file_src.gsub("/", "\\")} #{parameters.output_folder.gsub("/", "\\")}")
+            system("rename #{parameters.output_folder.gsub("/", "\\") + "\\" + parameters.export_name + "_" + parameters.maps_array[i]}.png #{parameters.export_name}.png")
         else
-            while i < (maps_array.length() - 1) do
+            while i < (parameters.maps_array.length() - 1) do
 
-                image_file_src = $output_folder + "/maps/" + $export_name + "_#{maps_array[i]}.png"
-                image_file_dst = $output_folder + "/maps/" + $export_name + "_#{maps_array[i + 1]}.png"
+                image_file_src = parameters.output_folder + "/mb_ave_temp_#{random_number}/" + parameters.export_name + "_#{parameters.maps_array[i]}.png"
+                image_file_dst = parameters.output_folder + "/mb_ave_temp_#{random_number}/" + parameters.export_name + "_#{parameters.maps_array[i + 1]}.png"
 
                 system("cd \\")
                 system("magick composite #{image_file_src} #{image_file_dst} -compose Multiply #{image_file_dst}")
 
                 # rename if last element
-                if (i == maps_array.length() - 2) then
+                if (i == parameters.maps_array.length() - 2) then
                     system("cd \\")
-                    system("move /Y #{image_file_dst.gsub("/", "\\")} #{$output_folder.gsub("/", "\\")}")
-                    system("rename #{$output_folder.gsub("/", "\\") + "\\" + $export_name + "_" + maps_array[i + 1]}.png #{$export_name}.png")
+                    system("move /Y #{image_file_dst.gsub("/", "\\")} #{parameters.output_folder.gsub("/", "\\")}")
+                    system("rename #{parameters.output_folder.gsub("/", "\\") + "\\" + parameters.export_name + "_" + parameters.maps_array[i + 1]}.png #{parameters.export_name}.png")
                 end
 
                 i += 1
@@ -283,22 +302,25 @@ module MattiaBressanelli
 
         # delete maps
         system("cd \\")
-        system("rmdir /Q /S -r #{$output_folder.gsub("/", "\\")}\\maps")
+        system("rmdir /Q /S -r #{parameters.output_folder.gsub("/", "\\")}\\mb_ave_temp_#{random_number}")
 
-        $ambientocclusion_exist = false
-        $boolean_exist = false
+        parameters.ambientocclusion_exist = false
+        parameters.boolean_exist = false
     end
 
     unless file_loaded?(__FILE__)
 
-      menu = UI.menu('View')
-      menu.add_item('Advanced View Export') {
-        self.main()
-      }
+        # create menu entry
+        extensions_menu = UI.menu('Extensions')
+        submenu = extensions_menu.add_submenu("Mattia Bressanelli")
+        submenu.add_item('Advanced View Export') {
+            self.main()
+        }
 
-      self.load_custom_styles()
+        # load styles
+        self.load_custom_styles()
 
-      file_loaded(__FILE__)
+        file_loaded(__FILE__)
     end
 
   end # module AdvancedViewExport
